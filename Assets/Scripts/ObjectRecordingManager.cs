@@ -22,13 +22,15 @@ public enum PlaybackEndBehaviour
 
 public class ObjectRecordingManager : MonoBehaviour
 {
+    [SerializeField]
     private List<ObjectRecorder> recorders;
 
-    public bool recording = false;
+    [SerializeField]
+    private bool recording = false;
 
     public string saveFile = "objectRecordings.txt";
 
-    public float targetFrameRate = 0.0f;
+    public float targetFrameRate = 5.0f;
     private float targetTimeStep;
 
     public float elapsedTime;
@@ -60,6 +62,65 @@ public class ObjectRecordingManager : MonoBehaviour
                 // Now that we've recorded, wait again until we've excceded our timestep
                 elapsedTime -= targetTimeStep;
             }
+        }
+
+        if (Input.GetKeyDown(KeyCode.R) && !recording)
+        {
+            Debug.Log("Starting Recording");
+            StartRecording();
+        }
+        else if (Input.GetKeyDown(KeyCode.R) && recording)
+        {
+            Debug.Log("Stopping Recording");
+            StopRecording();
+        }
+        else if (!recording)
+        {
+            if (Input.GetKeyDown(KeyCode.Space))
+            {
+                SetPlaybackDirection(PlaybackDirection.FORWARD);
+                SetEndBehaviour(PlaybackEndBehaviour.LOOP);
+                for (int i = 0; i < recorders.Count; i++)
+                {
+                    recorders[i].ResetPlayback();
+                }
+            }
+        }
+    }
+
+    public void StartRecording()
+    {
+        for (int i = 0; i < recorders.Count; i++)
+        {
+            SetPlaybackDirection(PlaybackDirection.STOP);
+            recorders[i].StartRecording();
+        }
+        recording = true;
+    }
+
+    public void StopRecording()
+    {
+        recording = false;
+        for (int i = 0; i < recorders.Count; i++)
+        {
+            recorders[i].ResetPlayback();
+            // ****TODO: Save recording to text file
+        }
+    }
+
+    public void SetPlaybackDirection(PlaybackDirection dir)
+    {
+        for (int i = 0; i < recorders.Count; i++)
+        {
+            recorders[i].playbackDirection = dir;
+        }
+    }
+
+    public void SetEndBehaviour(PlaybackEndBehaviour end)
+    {
+        for (int i = 0; i < recorders.Count; i++)
+        {
+            recorders[i].endBehaviour = end;
         }
     }
 }

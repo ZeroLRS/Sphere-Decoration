@@ -1,11 +1,12 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 [System.Serializable]
 public struct Keyframe
 {
-    public float timestamp;
+    public float duration;
     public Vector3 location, rotation, scale;
 }
 
@@ -15,8 +16,12 @@ public class ObjectRecorder : MonoBehaviour
     private List<Keyframe> keyframes;
 
     [SerializeField]
+    public List<GameObject> enableWhenRecording;
+
+    [SerializeField]
     private int keyframeIndex = 0;
-    private float currentFrameDuration;
+
+    private float lastKeyframeRecordTime = 0.0f;
 
     public PlaybackDirection playbackDirection;
     public PlaybackEndBehaviour endBehaviour;
@@ -25,14 +30,35 @@ public class ObjectRecorder : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        if (keyframes.Count > 1)
-        {
-            currentFrameDuration = keyframes[1].timestamp - keyframes[0].timestamp;
-        }
     }
 
     // Update is called once per frame
     void Update()
+    {
+        if (playbackDirection != PlaybackDirection.STOP)
+        {
+            UpdatePlayback();
+            UpdateTransform();
+        }
+    }
+
+    private void UpdateTransform()
+    {
+        // Get the current keyframe and update our transform values based on it
+        Keyframe currentFrame = keyframes[keyframeIndex];
+        gameObject.transform.localPosition = currentFrame.location;
+        gameObject.transform.rotation = Quaternion.Euler(currentFrame.rotation);
+        gameObject.transform.localScale = currentFrame.scale;
+    }
+
+    public void ResetPlayback()
+    {
+        keyframeIndex = 0;
+        currentPlaytime = 0.0f;
+        UpdateTransform();
+    }
+
+    private void UpdatePlayback()
     {
         currentPlaytime += Time.deltaTime * (int)playbackDirection;
 
@@ -45,21 +71,107 @@ public class ObjectRecorder : MonoBehaviour
         //  a) Has not gone below zero, do not change keyframe    *
         //  b) Below zero, procced to next (previous) frame       *
         //   i) If first frame, do ending behaviour               *
+
+        if (playbackDirection == PlaybackDirection.STOP)
+        {
+            return;
+        }
+
+        if (playbackDirection == PlaybackDirection.FORWARD)
+        {
+            if (currentPlaytime > keyframes[keyframeIndex].duration)
+            {
+                int nextIndex = keyframeIndex + 1;
+                if (keyframes.Count <= nextIndex)
+                {
+                    HandleEndBehaviour();
+                }
+                else
+                {
+                    currentPlaytime -= keyframes[keyframeIndex].duration;
+                    keyframeIndex = nextIndex;
+                }
+            }
+        }
+        else if (playbackDirection == PlaybackDirection.REVERSE)
+        {
+            if (currentPlaytime <= 0)
+            {
+                int nextIndex = keyframeIndex - 1;
+                if (nextIndex < 0)
+                {
+                    HandleEndBehaviour();
+                }
+                else
+                {
+                    currentPlaytime += keyframes[keyframeIndex].duration;
+                    keyframeIndex = nextIndex;
+                }
+            }
+        }
+
+    }
+
+    private void HandleEndBehaviour()
+    {
+        // If we are looping, set the index to the farthest end of the direction we start from
+        if (endBehaviour == PlaybackEndBehaviour.LOOP)
+        {
+            if (playbackDirection == PlaybackDirection.FORWARD)
+            {
+                keyframeIndex = 0;
+            }
+            else if (playbackDirection == PlaybackDirection.REVERSE)
+            {
+                keyframeIndex = keyframes.Count - 1;
+            }
+        }
+        // If we are ping-ponging, reverse playback direction
+        else if (endBehaviour == PlaybackEndBehaviour.PING_PONG)
+        {
+            if (playbackDirection == PlaybackDirection.FORWARD)
+            {
+                playbackDirection = PlaybackDirection.REVERSE;
+            }
+            else if (playbackDirection == PlaybackDirection.REVERSE)
+            {
+                playbackDirection = PlaybackDirection.FORWARD;
+            }
+        }
+        // If we are stopping playback... stop playback
+        else if (endBehaviour == PlaybackEndBehaviour.STOP)
+        {
+            playbackDirection = PlaybackDirection.STOP;
+        }
+    }
+
+    public void StartRecording()
+    {
+        // Reset values to start recording fresh
+        keyframes.Clear();
+        keyframeIndex = 0;
+        currentPlaytime = 0.0f;
+
+        // So that the first frame doesn't have a huge duration, set our last keyframe time to now
+        lastKeyframeRecordTime = Time.time;
     }
 
     public void RecordFrameNow()
     {
+        // Create a new keyframe
         Keyframe newFrame;
-        newFrame.timestamp = Time.time;
+        // The duration for the frame should be how long since the last one
+        newFrame.duration = Time.time - lastKeyframeRecordTime;
+
+        // Record all of the information about the object's transform
         newFrame.location = transform.position;
         newFrame.rotation = transform.rotation.eulerAngles;
         newFrame.scale = transform.localScale;
 
-        keyframes.Add(newFrame);
-    }
+        // Set our last record time to now
+        lastKeyframeRecordTime = Time.time;
 
-    public void SortKeyFrames()
-    {
-        // Sort keyframes by time
+        // Add this keyframe to the list
+        keyframes.Add(newFrame);
     }
 }
